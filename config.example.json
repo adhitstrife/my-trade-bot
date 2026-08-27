@@ -1,0 +1,25 @@
+{
+  "mode": "paper",
+  "pair": "btcidr",
+  "poll_seconds": 60,
+  "starting_idr": 1000000,
+  "fee_rate": 0.003,
+  "strategy": {
+    "fast_sma": 10,
+    "slow_sma": 30
+  },
+  "risk": {
+    "max_position_pct": 0.2,
+    "max_daily_loss_pct": 0.03,
+    "min_order_idr": 10000
+  },
+  "candle_timeframe": "60",
+  "screener": {
+    "enabled": true,
+    "paper_only": true,
+    "rescreen_hours": 4,
+    "allowlist": ["btcidr", "ethidr", "solidr"],
+    "min_volume_idr": 100000000,
+    "max_spread_pct": 0.01
+  }
+}
