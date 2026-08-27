@@ -34,6 +34,16 @@ The supplied `config.json` screens `BTCIDR`, `ETHIDR`, and `SOLIDR` on startup. 
 
 It is deliberately **paper-only** by default. It re-screens every four hours only when no asset is held, so the bot cannot switch away from a position that still needs to be sold. Adjust `screener.allowlist`, `min_volume_idr`, `max_spread_pct`, and `rescreen_hours` in `config.json` to suit your research. This is a filter, not a prediction model.
 
+## Protective exits
+
+The default configuration closes a held paper position for the first applicable condition:
+
+- **Stop-loss:** price is 3% below the paper entry cost.
+- **Take-profit:** price is 8% above the paper entry cost.
+- **Trailing stop:** once price has risen at least 4%, sell if it then falls 2.5% from its highest price since entry.
+
+These percentages are configurable under `risk` in `config.json`. An exit is allowed even after the daily-loss guard has stopped new buys.
+
 ## Backtesting
 
 Provide a CSV with `timestamp,open,high,low,close,volume` columns (timestamp can be ISO-8601 or Unix seconds):

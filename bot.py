@@ -81,6 +81,9 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("fast_sma must be smaller than slow_sma")
     if not 0 < config["risk"]["max_position_pct"] <= 1:
         raise ValueError("max_position_pct must be between 0 and 1")
+    for key in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct"):
+        if key not in config["risk"] or not 0 < float(config["risk"][key]) < 1:
+            raise ValueError(f"risk.{key} must be a decimal between 0 and 1")
     screener = config.get("screener", {})
     if screener.get("enabled") and not screener.get("allowlist"):
         raise ValueError("screener.allowlist must contain at least one pair")
@@ -159,6 +162,7 @@ class Ledger:
     active_pair: str = ""
     last_screen_time: float = 0.0
     screen_events: list[dict[str, Any]] | None = None
+    highest_price: float = 0.0
 
     def __post_init__(self) -> None:
         self.trades = self.trades or []
@@ -260,7 +264,7 @@ def warm_prices(api: Indodax, pair: str, config: dict[str, Any]) -> list[float]:
     return prices[-(slow + 2):]
 
 
-def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any]) -> dict[str, Any] | None:
+def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
     fee = float(config["fee_rate"])
     risk = config["risk"]
     if side == "buy":
@@ -272,6 +276,7 @@ def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any]) 
         ledger.cash_idr -= spend
         ledger.asset += quantity
         ledger.average_cost = (old_value + spend) / ledger.asset
+        ledger.highest_price = price
         amount = spend
     else:
         quantity = ledger.asset
@@ -280,8 +285,8 @@ def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any]) 
         proceeds = quantity * price * (1 - fee)
         ledger.cash_idr += proceeds
         ledger.realized_pnl += proceeds - quantity * ledger.average_cost
-        ledger.asset, ledger.average_cost, amount = 0.0, 0.0, quantity
-    trade = {"time": now(), "mode": "paper", "side": side, "price": price, "amount": amount, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
+        ledger.asset, ledger.average_cost, ledger.highest_price, amount = 0.0, 0.0, 0.0, quantity
+    trade = {"time": now(), "mode": "paper", "side": side, "reason": reason, "price": price, "amount": amount, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
     ledger.trades.append(trade)
     return trade
 
@@ -294,6 +299,23 @@ def can_trade(ledger: Ledger, price: float, config: dict[str, Any]) -> tuple[boo
     return True, ""
 
 
+def exit_reason(ledger: Ledger, price: float, config: dict[str, Any]) -> str | None:
+    """Return a protective sell reason; these checks never open a new position."""
+    if ledger.asset <= 0 or ledger.average_cost <= 0:
+        return None
+    risk = config["risk"]
+    entry = ledger.average_cost
+    ledger.highest_price = max(ledger.highest_price, price)
+    if price <= entry * (1 - float(risk["stop_loss_pct"])):
+        return "stop_loss"
+    if price >= entry * (1 + float(risk["take_profit_pct"])):
+        return "take_profit"
+    activation = entry * (1 + float(risk["trailing_activation_pct"]))
+    if ledger.highest_price >= activation and price <= ledger.highest_price * (1 - float(risk["trailing_stop_pct"])):
+        return "trailing_stop"
+    return None
+
+
 def report(ledger: Ledger, price: float, config: dict[str, Any], title: str = "Bot report") -> str:
     value = equity(ledger, price)
     start = float(config["starting_idr"])
@@ -304,7 +326,7 @@ def report(ledger: Ledger, price: float, config: dict[str, Any], title: str = "B
         lines.append(f"Last screen: {last_screen['pair'].upper()} | score {last_screen['score']:.2f} | 24h momentum {last_screen['momentum_24h_pct']:.2f}% | spread {last_screen['spread_pct']:.3f}%")
     if ledger.trades:
         lines.append("Recent trades:")
-        lines += [f"  {x['time']} | {x['mode']} {x['side']} @ {x['price']:,.2f}" for x in ledger.trades[-5:]]
+        lines += [f"  {x['time']} | {x['mode']} {x['side']} ({x.get('reason', 'unknown')}) @ {x['price']:,.2f}" for x in ledger.trades[-5:]]
     return "\n".join(lines)
 
 
@@ -366,14 +388,19 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
             price = api.ticker(active_pair)
             prices.append(price)
             prices = prices[-(int(config["strategy"]["slow_sma"]) + 2):]
-            decision = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
+            protective_exit = exit_reason(ledger, price, config)
+            decision = "sell" if protective_exit else signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
             allowed, reason = can_trade(ledger, price, config)
+            # An exit reduces exposure, so it remains available even if the
+            # daily-loss guard has blocked new entries.
+            if decision == "sell":
+                allowed = True
             if decision and allowed:
                 if config["mode"] == "paper":
-                    result = fill_paper(ledger, decision, price, config)
+                    result = fill_paper(ledger, decision, price, config, protective_exit or "sma_crossover")
                 else:
-                    result = execute_live(api, ledger, decision, price, {**config, "pair": active_pair})
-                if result: print(f"{now()} {decision.upper()} executed: {result}")
+                    result = execute_live(api, ledger, decision, price, {**config, "pair": active_pair}, protective_exit or "sma_crossover")
+                if result: print(f"{now()} {decision.upper()} executed ({protective_exit or 'sma_crossover'}): {result}")
             elif decision:
                 print(f"{now()} {decision.upper()} blocked: {reason}")
             ledger.peak_equity = max(ledger.peak_equity, equity(ledger, price))
@@ -388,7 +415,7 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
         print("Stopped; paper state was not saved.")
 
 
-def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: dict[str, Any]) -> dict[str, Any] | None:
+def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
     # Uses the exchange balance each time and records submission; it never assumes instant fills.
     balances = api.balances()
     base = config["pair"].lower().replace("idr", "")
@@ -400,7 +427,7 @@ def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: 
         amount = balances.get(base, 0.0)
         if amount <= 0: return None
         result = api.trade(config["pair"], "sell", price, asset_amount=amount)
-    ledger.trades.append({"time": now(), "mode": "live", "side": side, "price": price, "exchange_response": result})
+    ledger.trades.append({"time": now(), "mode": "live", "side": side, "reason": reason, "price": price, "exchange_response": result})
     return result
 
 
