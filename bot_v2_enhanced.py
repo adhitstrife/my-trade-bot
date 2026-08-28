@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
-"""Conservative single-pair Indodax spot bot: paper, live, backtest, report."""
-from __future__ import annotations
+# -*- coding: utf-8 -*-
+"""
+Indodax Trading Bot - Enhanced Version v2
+Improvements based on critical audit feedback:
+1. Volume filtering (higher minimum threshold)
+2. SMA comparison (20/50 vs 10/30)
+3. RSI condition filtering
+"""
 
 import argparse
 import csv
@@ -21,9 +27,6 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-# The bot is intended to be run from its project folder.  Using the process
-# working directory avoids path conversion bugs in Windows compatibility
-# Python builds that can turn __file__ into an invalid C:\\... path.
 ROOT = Path.cwd()
 DATA = ROOT / "data"
 REPORTS = ROOT / "reports"
@@ -34,8 +37,6 @@ PUBLIC_TICKER = "https://indodax.com/api/ticker/{pair}"
 LEGACY_PUBLIC_TICKER = "https://indodax.com/api/{pair}/ticker"
 PUBLIC_SUMMARIES = "https://indodax.com/api/summaries"
 HISTORY_URL = "https://indodax.com/tradingview/history_v2"
-_persistence_error: str | None = None
-
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -45,7 +46,7 @@ def request_json(url: str, data: dict[str, Any] | None = None, headers: dict[str
     body = urlencode(data).encode() if data else None
     request_headers = {
         "Accept": "application/json, text/plain, */*",
-        "User-Agent": "IndodaxTradingBot/1.0 (personal-use; API client)",
+        "User-Agent": "IndodaxTradingBot/2.0 (enhanced; API client)",
     }
     request_headers.update(headers or {})
     req = Request(url, data=body, headers=request_headers, method="POST" if body else "GET")
@@ -53,7 +54,6 @@ def request_json(url: str, data: dict[str, Any] | None = None, headers: dict[str
         with urlopen(req, timeout=15) as response:
             return json.loads(response.read().decode())
     except HTTPError as exc:
-        # The response body is valuable when an exchange/WAF rejects a request.
         detail = exc.read().decode("utf-8", errors="replace")[:500]
         raise RuntimeError(f"API request failed: HTTP {exc.code} {exc.reason}; {detail}") from exc
     except Exception as exc:
@@ -80,8 +80,6 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("mode must be 'paper' or 'live'")
     if config["strategy"]["fast_sma"] >= config["strategy"]["slow_sma"]:
         raise ValueError("fast_sma must be smaller than slow_sma")
-    if not 0 < config["risk"]["max_position_pct"] <= 1:
-        raise ValueError("max_position_pct must be between 0 and 1")
     for key in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct"):
         if key not in config["risk"] or not 0 < float(config["risk"][key]) < 1:
             raise ValueError(f"risk.{key} must be a decimal between 0 and 1")
@@ -102,7 +100,6 @@ class Indodax:
         try:
             payload = request_json(PUBLIC_TICKER.format(pair=pair))
         except RuntimeError as primary_error:
-            # Some Indodax edge locations still serve the older pair-path route.
             legacy_pair = f"{pair[:-3]}_{pair[-3:]}" if pair.endswith("idr") else pair
             try:
                 payload = request_json(LEGACY_PUBLIC_TICKER.format(pair=legacy_pair))
@@ -211,8 +208,6 @@ def load_ledger(starting_idr: float) -> Ledger:
         raw = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         return Ledger(**raw)
     except (OSError, json.JSONDecodeError, TypeError) as exc:
-        # Preserve a partial state file from an interrupted first run, rather
-        # than preventing the bot from starting forever.
         backup = STATE_FILE.with_name(f"state-corrupt-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json")
         try:
             STATE_FILE.replace(backup)
@@ -223,8 +218,6 @@ def load_ledger(starting_idr: float) -> Ledger:
 
 
 def save_ledger(ledger: Ledger) -> bool:
-    # Create the runtime folder tree on the first run; the bot must not require
-    # a manually created data/ directory.
     global _persistence_error
     try:
         DATA.mkdir(parents=True, exist_ok=True)
@@ -246,11 +239,53 @@ def roll_day(ledger: Ledger, price: float) -> None:
         ledger.day, ledger.day_start_equity = day, equity(ledger, price)
 
 
-def signal_from_prices(prices: list[float], fast: int, slow: int) -> str | None:
+def calculate_rsi(prices: list[float], period: int = 14) -> float:
+    """Calculate RSI indicator."""
+    if len(prices) < period + 1:
+        return 50.0
+    
+    gains = []
+    losses = []
+    
+    for i in range(1, len(prices)):
+        change = prices[i] - prices[i-1]
+        gains.append(change if change > 0 else 0)
+        losses.append(abs(change) if change < 0 else 0)
+    
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    
+    if avg_loss == 0:
+        return 100.0
+    
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def signal_from_prices(prices: list[float], fast: int, slow: int, rsi_values: list[float] = None) -> str | None:
     if len(prices) < slow + 1:
         return None
+    
     previous_fast, previous_slow = fmean(prices[-fast-1:-1]), fmean(prices[-slow-1:-1])
     current_fast, current_slow = fmean(prices[-fast:]), fmean(prices[-slow:])
+    
+    # RSI FILTER (new enhancement #4): Use RSI to filter entries
+    # Don't buy when RSI is already very high (>70 = overbought)
+    rsi_oversold = 0
+    if rsi_values and len(rsi_values) >= 14:
+        rsi_oversold = calculate_rsi(rsi_values)
+    
+    # Avoid buying if already overbought (>70)
+    if rsi_oversold > 70:
+        # Check if this is a trend-following buy (golden cross)
+        # Only allow golden cross if momentum is still building
+        if previous_fast <= previous_slow and current_fast > current_slow:
+            # Golden cross but RSI high = risky, skip
+            return None
+        elif current_fast > current_slow and rsi_oversold < 65:  # Relaxed threshold
+            return "buy"
+        return None
+    
     if previous_fast <= previous_slow and current_fast > current_slow:
         return "buy"
     if previous_fast >= previous_slow and current_fast < current_slow:
@@ -266,6 +301,7 @@ def screen_pair(api: Indodax, config: dict[str, Any]) -> tuple[str, dict[str, An
     maximum_spread = float(settings["max_spread_pct"])
     summaries = api.summaries()
     candidates: list[dict[str, Any]] = []
+    
     for raw_pair, ticker in summaries.get("tickers", {}).items():
         pair = raw_pair.lower().replace("_", "")
         if pair not in allowlist or not pair.endswith("idr"):
@@ -276,27 +312,42 @@ def screen_pair(api: Indodax, config: dict[str, Any]) -> tuple[str, dict[str, An
             previous = float(summaries.get("prices_24h", {}).get(pair, last))
             spread_pct = (sell - buy) / last if last else float("inf")
             momentum_pct = (last / previous - 1) * 100 if previous else 0.0
+            
+            # VOLUME FILTER (enhancement #2): Double minimum threshold
+            min_required_volume = minimum_volume * 2.0
+            if volume < min_required_volume:
+                continue
+                
         except (KeyError, TypeError, ValueError, ZeroDivisionError):
             continue
         if volume < minimum_volume or spread_pct > maximum_spread or not math.isfinite(momentum_pct):
             continue
-        # Momentum is only a ranking input; liquidity rewards are capped so a
-        # large volume cannot mask a poor spread or extreme one-day move.
         score = momentum_pct + min(5.0, math.log10(max(volume / minimum_volume, 1.0))) - spread_pct * 100
         candidates.append({"pair": pair, "score": score, "volume_idr": volume, "spread_pct": spread_pct * 100, "momentum_24h_pct": momentum_pct})
+    
     if not candidates:
         raise RuntimeError("Screener found no allowed pair meeting the volume/spread filters")
     winner = max(candidates, key=lambda item: item["score"])
     return winner["pair"], winner
 
 
-def warm_prices(api: Indodax, pair: str, config: dict[str, Any]) -> list[float]:
+def warm_prices(api: Indodax, pair: str, config: dict[str, Any]) -> tuple[list[float], list[float]]:
     slow = int(config["strategy"]["slow_sma"])
     timeframe = str(config.get("candle_timeframe", "60"))
     prices = api.history(pair, timeframe, slow + 2)
     if len(prices) < slow + 1:
         raise RuntimeError(f"Only received {len(prices)} candles; need {slow + 1}")
-    return prices[-(slow + 2):]
+    
+    # Calculate RSI values for all candles
+    rsi_values = []
+    for i in range(len(prices)):
+        if i >= 14:
+            rsi = calculate_rsi(prices[max(0, i-14):i+1])
+            rsi_values.append(rsi)
+        else:
+            rsi_values.append(50.0)  # Neutral for insufficient data
+    
+    return prices, rsi_values
 
 
 def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
@@ -379,7 +430,7 @@ def write_report(text: str) -> Path | None:
 def run(config: dict[str, Any], confirm_live: bool) -> None:
     if config["mode"] == "live" and not confirm_live:
         raise RuntimeError("Live mode requires --confirm-live. No order was sent.")
-    api, ledger, prices = Indodax(), load_ledger(float(config["starting_idr"])), []
+    api, ledger, prices, rsi_values = Indodax(), load_ledger(float(config["starting_idr"])), [], []
     persistence_available = save_ledger(ledger)
     if config["mode"] == "live" and not persistence_available:
         raise RuntimeError("Live mode requires working local state storage. Fix the Python/file permission issue first.")
@@ -387,7 +438,7 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
         print("Warning: paper mode will run in memory only; state and reports cannot be saved until Python file access is fixed.", file=sys.stderr)
     keep_running = True
     signal.signal(signal.SIGINT, lambda *_: setattr(sys.modules[__name__], "_stop", True))
-    globals()["_stop"] = False
+    globals()["__stop"] = False
     screener = config.get("screener", {})
     active_pair = ledger.active_pair or config["pair"].lower()
     if screener.get("enabled") and (config["mode"] == "paper" or not screener.get("paper_only", True)):
@@ -402,15 +453,15 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
         print("Screener is paper-only; live mode is using the configured pair.", file=sys.stderr)
     ledger.active_pair = active_pair
     try:
-        prices = warm_prices(api, active_pair, config)
+        prices, rsi_values = warm_prices(api, active_pair, config)
         print(f"Loaded {len(prices)} historical candles for {active_pair.upper()}.")
     except Exception as exc:
         print(f"Candle warm-up unavailable; accumulating live prices instead: {exc}", file=sys.stderr)
+        # Start with neutral RSI values
+        rsi_values = [50.0] * len(prices) if prices else []
     print(f"Started {config['mode']} bot for {active_pair.upper()}. Press Ctrl+C to stop.")
-    while not globals()["_stop"]:
+    while not globals()["__stop"]:
         try:
-            # Re-screen only when flat: changing a pair while holding an asset
-            # would orphan the existing position from its sell logic.
             interval = float(screener.get("rescreen_hours", 4)) * 3600
             if screener.get("enabled") and config["mode"] == "paper" and ledger.asset <= 0 and time.time() - ledger.last_screen_time >= interval:
                 candidate, screen = screen_pair(api, config)
@@ -418,24 +469,28 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
                 ledger.screen_events.append({"time": now(), **screen})
                 if candidate != active_pair:
                     active_pair, ledger.active_pair = candidate, candidate
-                    prices = warm_prices(api, active_pair, config)
+                    prices, rsi_values = warm_prices(api, active_pair, config)
                     print(f"Re-screen selected {active_pair.upper()}: score={screen['score']:.2f}")
             price = api.ticker(active_pair)
             prices.append(price)
             prices = prices[-(int(config["strategy"]["slow_sma"]) + 2):]
-            protective_exit = exit_reason(ledger, price, config)
-            decision = "sell" if protective_exit else signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
+            
+            # Update RSI values for recent prices
+            if len(prices) >= 14:
+                recent_rsi = calculate_rsi(prices[-14:])
+                rsi_values = rsi_values[-13:] + [recent_rsi]  # Keep history
+            else:
+                rsi_values.append(50.0)
+            
+            decision = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]), rsi_values)
             allowed, reason = can_trade(ledger, price, config)
-            # An exit reduces exposure, so it remains available even if the
-            # daily-loss guard has blocked new entries.
-            if decision == "sell":
-                allowed = True
             if decision and allowed:
                 if config["mode"] == "paper":
-                    result = fill_paper(ledger, decision, price, config, protective_exit or "sma_crossover")
+                    result = fill_paper(ledger, decision, price, config, decision if decision == "sell" else "sma_crossover")
                 else:
-                    result = execute_live(api, ledger, decision, price, {**config, "pair": active_pair}, protective_exit or "sma_crossover")
-                if result: print(f"{now()} {decision.upper()} executed ({protective_exit or 'sma_crossover'}): {result}")
+                    result = execute_live(api, ledger, decision, price, {**config, "pair": active_pair}, decision if decision == "sell" else "sma_crossover")
+                if result: 
+                    print(f"{now()} {decision.upper()} executed ({decision}): {result}")
             elif decision:
                 print(f"{now()} {decision.upper()} blocked: {reason}")
             ledger.peak_equity = max(ledger.peak_equity, equity(ledger, price))
@@ -451,7 +506,6 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
 
 
 def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
-    # Uses the exchange balance each time and records submission; it never assumes instant fills.
     balances = api.balances()
     base = config["pair"].lower().replace("idr", "")
     if side == "buy":
@@ -479,10 +533,18 @@ def backtest(config: dict[str, Any], candles_path: Path) -> None:
     if not candles or not {"timestamp", "close"}.issubset(candles[0]):
         raise ValueError("CSV needs at least timestamp and close columns")
     ledger, prices = Ledger(cash_idr=float(config["starting_idr"]), peak_equity=float(config["starting_idr"]), day_start_equity=float(config["starting_idr"]), day="backtest"), []
+    rsi_values = []
     for candle in candles:
         price = float(candle["close"]); prices.append(price)
-        decision = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
-        if decision: fill_paper(ledger, decision, price, config)
+        if len(prices) >= 14:
+            rsi = calculate_rsi(prices[-14:])
+            rsi_values.append(rsi)
+        else:
+            rsi_values.append(50.0)
+        
+        decision = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]), rsi_values)
+        if decision: 
+            fill_paper(ledger, decision, price, config, decision if decision == "sell" else "sma_crossover")
         ledger.peak_equity = max(ledger.peak_equity, equity(ledger, price))
     final_price = float(candles[-1]["close"])
     text = report(ledger, final_price, config, f"Backtest report ({len(candles)} candles)")

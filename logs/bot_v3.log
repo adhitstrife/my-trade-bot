@@ -1,0 +1,70 @@
+State load failed: Ledger.__init__() got an unexpected keyword argument 'screen_events'. Using fresh ledger.
+
+======================================================================
+🤖 INDO DAX TRADING BOT v3 WITH CCXT
+======================================================================
+Mode: paper | Pair: BTCIDR
+SMA: 20/50 on 15m candles
+Poll interval: 900 seconds
+Using CCXT for auto-retry & rate limit handling
+======================================================================
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+
+✓ Loaded 52 initial prices for BTCIDR
+
+✦ Re-screening every 6 hours...
+✓ Ticker: BTCIDR @ Rp 1,406,001,000
+2026-08-28T09:58:10+00:00 | Equity: Rp 1,000,000.00 | Highest: Rp 0.00
+⚠️ Network error: indodax GET https://indodax.com/api/ticker/btcidr
+2026-08-28T10:13:10+00:00 | ERROR: NetworkError: indodax GET https://indodax.com/api/ticker/btcidr

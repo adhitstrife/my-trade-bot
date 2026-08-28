@@ -1,0 +1,30 @@
+{
+  "mode": "paper",
+  "pair": "btcidr",
+  "poll_seconds": 900,
+  "starting_idr": 1000000,
+  "fee_rate": 0.003,
+  "strategy": {
+    "fast_sma": 20,
+    "slow_sma": 50,
+    "candle_timeframe": "15"
+  },
+  "risk": {
+    "max_position_pct": 0.2,
+    "max_daily_loss_pct": 0.05,
+    "min_order_idr": 50000,
+    "stop_loss_pct": 0.02,
+    "take_profit_pct": 0.08,
+    "trailing_stop_pct": 0.015,
+    "trailing_activation_pct": 0.04
+  },
+  "candle_timeframe": "15",
+  "screener": {
+    "enabled": true,
+    "paper_only": true,
+    "rescreen_hours": 6,
+    "allowlist": ["btcidr", "ethidr"],
+    "min_volume_idr": 500000000,
+    "max_spread_pct": 0.005
+  }
+}
