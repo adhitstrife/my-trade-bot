@@ -1,6 +1,49 @@
-.env
-data/
-reports/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
 
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs (IMPORTANT: Never commit sensitive logs)
+logs/
+*.log
+.log
+
+# Data files
+data/state.json
+data/*.json
+
+# Configuration with secrets
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Backup files
+*.bak
+*~
+backup/
