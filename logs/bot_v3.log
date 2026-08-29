@@ -68,3 +68,233 @@ Using CCXT for auto-retry & rate limit handling
 2026-08-28T09:58:10+00:00 | Equity: Rp 1,000,000.00 | Highest: Rp 0.00
 ⚠️ Network error: indodax GET https://indodax.com/api/ticker/btcidr
 2026-08-28T10:13:10+00:00 | ERROR: NetworkError: indodax GET https://indodax.com/api/ticker/btcidr
+✓ Ticker: BTCIDR @ Rp 1,403,552,000
+2026-08-28T10:28:11+00:00 | Equity: Rp 1,000,000.00 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,404,686,000
+2026-08-28T10:43:11+00:00 | Equity: Rp 1,000,000.00 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,406,694,000
+2026-08-28T10:58:11+00:00 | Equity: Rp 1,000,000.00 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,410,697,000
+2026-08-28T11:13:11+00:00 | BUY (sma_crossover) | Rp 1,410,697,000.00
+2026-08-28T11:13:11+00:00 | Equity: Rp 999,400.00 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,410,697,000
+2026-08-28T11:28:11+00:00 | Equity: Rp 999,400.00 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,410,696,000
+2026-08-28T11:43:11+00:00 | Equity: Rp 999,399.86 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,410,595,000
+2026-08-28T11:58:11+00:00 | Equity: Rp 999,385.58 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,410,597,000
+2026-08-28T12:13:11+00:00 | Equity: Rp 999,385.87 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,410,596,000
+2026-08-28T12:28:11+00:00 | Equity: Rp 999,385.72 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,408,001,000
+2026-08-28T12:43:11+00:00 | Equity: Rp 999,018.92 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,406,754,000
+2026-08-28T12:58:11+00:00 | Equity: Rp 998,842.66 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,405,000,000
+2026-08-28T13:13:11+00:00 | Equity: Rp 998,594.74 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,401,361,000
+2026-08-28T13:28:11+00:00 | Equity: Rp 998,080.37 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,400,566,000
+2026-08-28T13:43:11+00:00 | Equity: Rp 997,968.00 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,405,035,000
+2026-08-28T13:58:11+00:00 | Equity: Rp 998,599.68 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,395,000,000
+2026-08-28T14:13:12+00:00 | Equity: Rp 997,181.25 | Highest: Rp 1,410,697,000.00
+✓ Ticker: BTCIDR @ Rp 1,395,631,000
+2026-08-28T14:28:12+00:00 | SELL (sell) | Rp 1,395,631,000.00
+2026-08-28T14:28:12+00:00 | Equity: Rp 996,678.63 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,407,331,000
+2026-08-28T14:43:12+00:00 | Equity: Rp 996,678.63 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,408,352,000
+2026-08-28T14:58:12+00:00 | Equity: Rp 996,678.63 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,406,553,000
+2026-08-28T15:13:12+00:00 | Equity: Rp 996,678.63 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,406,698,000
+2026-08-28T15:28:12+00:00 | BUY (sma_crossover) | Rp 1,406,698,000.00
+2026-08-28T15:28:12+00:00 | Equity: Rp 996,080.62 | Highest: Rp 1,406,698,000.00
+✓ Ticker: BTCIDR @ Rp 1,397,291,000
+2026-08-28T15:43:12+00:00 | SELL (sell) | Rp 1,397,291,000.00
+2026-08-28T15:43:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+
+✦ Re-screening every 6 hours...
+✓ Ticker: BTCIDR @ Rp 1,390,001,000
+2026-08-28T15:58:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,381,001,000
+2026-08-28T16:13:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,375,107,000
+2026-08-28T16:28:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,931,000
+2026-08-28T16:43:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,845,000
+2026-08-28T16:58:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,995,000
+2026-08-28T17:13:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,382,440,000
+2026-08-28T17:28:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,377,888,000
+2026-08-28T17:43:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,413,000
+2026-08-28T17:58:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,706,000
+2026-08-28T18:13:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,375,740,000
+2026-08-28T18:28:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,221,000
+2026-08-28T18:43:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,195,000
+2026-08-28T18:58:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,455,000
+2026-08-28T19:13:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,051,000
+2026-08-28T19:28:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,377,485,000
+2026-08-28T19:43:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,844,000
+2026-08-28T19:58:12+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,375,707,000
+2026-08-28T20:13:13+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,900,000
+2026-08-28T20:28:13+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,372,943,000
+2026-08-28T20:43:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,372,284,000
+2026-08-28T20:58:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,001,000
+2026-08-28T21:13:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,001,000
+2026-08-28T21:28:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,383,000
+2026-08-28T21:43:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+
+✦ Re-screening every 6 hours...
+✓ Ticker: BTCIDR @ Rp 1,374,576,000
+2026-08-28T21:58:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,576,000
+2026-08-28T22:13:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,459,000
+2026-08-28T22:28:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,388,000
+2026-08-28T22:43:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,312,000
+2026-08-28T22:58:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,313,000
+2026-08-28T23:13:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,308,000
+2026-08-28T23:28:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,308,000
+2026-08-28T23:43:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,450,000
+2026-08-28T23:58:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,381,766,000
+2026-08-29T00:13:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,382,034,000
+2026-08-29T00:28:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,381,138,000
+2026-08-29T00:43:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,452,000
+2026-08-29T00:58:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,246,000
+2026-08-29T01:13:43+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,377,999,000
+2026-08-29T01:28:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,380,000,000
+2026-08-29T01:43:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,998,000
+2026-08-29T01:58:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,605,000
+2026-08-29T02:13:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,339,000
+2026-08-29T02:28:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,339,000
+2026-08-29T02:43:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,502,000
+2026-08-29T02:58:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,379,501,000
+2026-08-29T03:13:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,378,307,000
+2026-08-29T03:28:44+00:00 | Equity: Rp 994,159.38 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,377,399,000
+2026-08-29T03:43:44+00:00 | BUY (sma_crossover) | Rp 1,377,399,000.00
+2026-08-29T03:43:44+00:00 | Equity: Rp 993,562.89 | Highest: Rp 1,377,399,000.00
+
+✦ Re-screening every 6 hours...
+✓ Ticker: BTCIDR @ Rp 1,375,385,000
+2026-08-29T03:58:44+00:00 | Equity: Rp 993,273.03 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,377,397,000
+2026-08-29T04:13:44+00:00 | Equity: Rp 993,562.60 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,151,000
+2026-08-29T04:28:44+00:00 | Equity: Rp 993,383.27 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,217,000
+2026-08-29T04:43:44+00:00 | Equity: Rp 993,392.77 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,248,000
+2026-08-29T04:58:44+00:00 | Equity: Rp 993,397.23 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,377,323,000
+2026-08-29T05:13:44+00:00 | Equity: Rp 993,551.95 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,377,322,000
+2026-08-29T05:28:44+00:00 | Equity: Rp 993,551.80 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,377,320,000
+2026-08-29T05:43:45+00:00 | Equity: Rp 993,551.52 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T05:58:45+00:00 | Equity: Rp 993,363.27 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,014,000
+2026-08-29T06:13:45+00:00 | Equity: Rp 993,363.56 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T06:28:45+00:00 | Equity: Rp 993,363.41 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T06:43:45+00:00 | Equity: Rp 993,363.41 | Highest: Rp 1,377,399,000.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T06:58:45+00:00 | SELL (sell) | Rp 1,376,013,000.00
+2026-08-29T06:58:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T07:13:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T07:28:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T07:43:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T07:58:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T08:13:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T08:28:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T08:43:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T08:58:45+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T09:13:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T09:28:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T09:43:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+
+✦ Re-screening every 6 hours...
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T09:58:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T10:13:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,013,000
+2026-08-29T10:28:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,012,000
+2026-08-29T10:43:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,376,324,000
+2026-08-29T10:58:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,375,997,000
+2026-08-29T11:13:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,461,000
+2026-08-29T11:28:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,375,590,000
+2026-08-29T11:43:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,018,000
+2026-08-29T11:58:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,374,438,000
+2026-08-29T12:13:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,002,000
+2026-08-29T12:28:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,423,000
+2026-08-29T12:43:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,419,000
+2026-08-29T12:58:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
+✓ Ticker: BTCIDR @ Rp 1,373,420,000
+2026-08-29T13:13:46+00:00 | Equity: Rp 992,769.30 | Highest: Rp 0.00
