@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
-BOT_DIR = Path("/opt/data/my-trade-bot")
+BOT_DIR = Path(__file__).resolve().parent
 os.chdir(BOT_DIR)
 sys.path.insert(0, str(BOT_DIR))
 

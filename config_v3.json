@@ -4,6 +4,7 @@
   "poll_seconds": 900,
   "starting_idr": 1000000,
   "fee_rate": 0.003,
+  "execution_slippage_pct": 0.001,
   "strategy": {
     "fast_sma": 20,
     "slow_sma": 50,
@@ -11,6 +12,7 @@
   },
   "risk": {
     "max_position_pct": 0.2,
+    "max_risk_per_trade_pct": 0.005,
     "max_daily_loss_pct": 0.05,
     "min_order_idr": 50000,
     "stop_loss_pct": 0.02,

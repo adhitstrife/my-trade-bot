@@ -4,7 +4,8 @@
 # Usage: ./start_bot.sh
 # ============================================================
 set -u
-cd /opt/data/my-trade-bot || { echo "Dir not found"; exit 1; }
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR" || { echo "Dir not found"; exit 1; }
 mkdir -p data logs
 
 LOG=logs/bot.log

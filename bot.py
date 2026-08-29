@@ -37,6 +37,16 @@ HISTORY_URL = "https://indodax.com/tradingview/history_v2"
 _persistence_error: str | None = None
 
 
+@dataclass(frozen=True)
+class Candle:
+    """A completed OHLC candle used for signals and backtests."""
+    timestamp: int
+    open: float
+    high: float
+    low: float
+    close: float
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -82,7 +92,7 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("fast_sma must be smaller than slow_sma")
     if not 0 < config["risk"]["max_position_pct"] <= 1:
         raise ValueError("max_position_pct must be between 0 and 1")
-    for key in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct"):
+    for key in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct", "max_risk_per_trade_pct"):
         if key not in config["risk"] or not 0 < float(config["risk"][key]) < 1:
             raise ValueError(f"risk.{key} must be a decimal between 0 and 1")
     screener = config.get("screener", {})
@@ -97,7 +107,7 @@ class Indodax:
         self.key = os.getenv("INDODAX_API_KEY", "")
         self.secret = os.getenv("INDODAX_API_SECRET", "")
 
-    def ticker(self, pair: str) -> float:
+    def ticker_data(self, pair: str) -> dict[str, float]:
         pair = pair.lower()
         try:
             payload = request_json(PUBLIC_TICKER.format(pair=pair))
@@ -109,14 +119,22 @@ class Indodax:
             except RuntimeError as fallback_error:
                 raise RuntimeError(f"Ticker unavailable. Primary: {primary_error}; fallback: {fallback_error}") from fallback_error
         try:
-            return float(payload["ticker"]["last"])
+            ticker = payload["ticker"]
+            return {
+                "last": float(ticker["last"]),
+                "bid": float(ticker.get("buy") or ticker["last"]),
+                "ask": float(ticker.get("sell") or ticker["last"]),
+            }
         except (KeyError, TypeError, ValueError) as exc:
             raise RuntimeError(f"Unexpected ticker response: {payload}") from exc
+
+    def ticker(self, pair: str) -> float:
+        return self.ticker_data(pair)["last"]
 
     def summaries(self) -> dict[str, Any]:
         return request_json(PUBLIC_SUMMARIES)
 
-    def history(self, pair: str, timeframe: str, bars: int) -> list[float]:
+    def history(self, pair: str, timeframe: str, bars: int) -> list[Candle]:
         minutes = int(timeframe) if timeframe.isdigit() else 60
         end = int(time.time())
         start = end - (minutes * 60 * (bars + 5))
@@ -124,7 +142,22 @@ class Indodax:
         payload = request_json(url)
         if not isinstance(payload, list):
             raise RuntimeError(f"Unexpected history response: {payload}")
-        return [float(candle["Close"]) for candle in payload if "Close" in candle]
+        candles: list[Candle] = []
+        for candle in payload:
+            try:
+                timestamp = int(float(candle.get("Time", candle.get("time", candle.get("timestamp")))))
+                candles.append(Candle(
+                    timestamp=timestamp,
+                    open=float(candle.get("Open", candle["Close"])),
+                    high=float(candle.get("High", candle["Close"])),
+                    low=float(candle.get("Low", candle["Close"])),
+                    close=float(candle["Close"]),
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        # TradingView responses commonly include the in-progress candle.  It
+        # must never be used for a crossover signal because it can repaint.
+        return candles[:-1]
 
     def private(self, method: str, **params: Any) -> dict[str, Any]:
         if not self.key or not self.secret:
@@ -198,6 +231,7 @@ class Ledger:
     last_screen_time: float = 0.0
     screen_events: list[dict[str, Any]] | None = None
     highest_price: float = 0.0
+    last_candle_time: int = 0
 
     def __post_init__(self) -> None:
         self.trades = self.trades or []
@@ -290,38 +324,43 @@ def screen_pair(api: Indodax, config: dict[str, Any]) -> tuple[str, dict[str, An
     return winner["pair"], winner
 
 
-def warm_prices(api: Indodax, pair: str, config: dict[str, Any]) -> list[float]:
+def warm_candles(api: Indodax, pair: str, config: dict[str, Any]) -> list[Candle]:
     slow = int(config["strategy"]["slow_sma"])
     timeframe = str(config.get("candle_timeframe", "60"))
-    prices = api.history(pair, timeframe, slow + 2)
-    if len(prices) < slow + 1:
-        raise RuntimeError(f"Only received {len(prices)} candles; need {slow + 1}")
-    return prices[-(slow + 2):]
+    candles = api.history(pair, timeframe, slow + 3)
+    if len(candles) < slow + 1:
+        raise RuntimeError(f"Only received {len(candles)} closed candles; need {slow + 1}")
+    return candles[-(slow + 2):]
 
 
 def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
     fee = float(config["fee_rate"])
     risk = config["risk"]
+    slippage = float(config.get("execution_slippage_pct", 0.001))
+    fill_price = price * (1 + slippage if side == "buy" else 1 - slippage)
     if side == "buy":
-        spend = min(ledger.cash_idr * float(risk["max_position_pct"]), ledger.cash_idr)
+        stop_distance = float(risk["stop_loss_pct"])
+        risk_budget = equity(ledger, price) * float(risk["max_risk_per_trade_pct"])
+        risk_limited_spend = risk_budget / stop_distance if stop_distance else ledger.cash_idr
+        spend = min(ledger.cash_idr * float(risk["max_position_pct"]), risk_limited_spend, ledger.cash_idr)
         if spend < float(risk["min_order_idr"]):
             return None
-        quantity = spend * (1 - fee) / price
+        quantity = spend * (1 - fee) / fill_price
         old_value = ledger.asset * ledger.average_cost
         ledger.cash_idr -= spend
         ledger.asset += quantity
         ledger.average_cost = (old_value + spend) / ledger.asset
-        ledger.highest_price = price
+        ledger.highest_price = fill_price
         amount = spend
     else:
         quantity = ledger.asset
         if quantity <= 0:
             return None
-        proceeds = quantity * price * (1 - fee)
+        proceeds = quantity * fill_price * (1 - fee)
         ledger.cash_idr += proceeds
         ledger.realized_pnl += proceeds - quantity * ledger.average_cost
         ledger.asset, ledger.average_cost, ledger.highest_price, amount = 0.0, 0.0, 0.0, quantity
-    trade = {"time": now(), "mode": "paper", "side": side, "reason": reason, "price": price, "amount": amount, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
+    trade = {"time": now(), "mode": "paper", "side": side, "reason": reason, "signal_price": price, "price": fill_price, "amount": amount, "fee_rate": fee, "slippage_pct": slippage, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
     ledger.trades.append(trade)
     return trade
 
@@ -379,7 +418,9 @@ def write_report(text: str) -> Path | None:
 def run(config: dict[str, Any], confirm_live: bool) -> None:
     if config["mode"] == "live" and not confirm_live:
         raise RuntimeError("Live mode requires --confirm-live. No order was sent.")
-    api, ledger, prices = Indodax(), load_ledger(float(config["starting_idr"])), []
+    if config["mode"] == "live" and os.getenv("ALLOW_LIVE_TRADING") != "YES":
+        raise RuntimeError("Live mode is locked. Set ALLOW_LIVE_TRADING=YES only after exchange reconciliation has been verified.")
+    api, ledger, candles = Indodax(), load_ledger(float(config["starting_idr"])), []
     persistence_available = save_ledger(ledger)
     if config["mode"] == "live" and not persistence_available:
         raise RuntimeError("Live mode requires working local state storage. Fix the Python/file permission issue first.")
@@ -402,10 +443,11 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
         print("Screener is paper-only; live mode is using the configured pair.", file=sys.stderr)
     ledger.active_pair = active_pair
     try:
-        prices = warm_prices(api, active_pair, config)
-        print(f"Loaded {len(prices)} historical candles for {active_pair.upper()}.")
+        candles = warm_candles(api, active_pair, config)
+        ledger.last_candle_time = candles[-1].timestamp
+        print(f"Loaded {len(candles)} closed historical candles for {active_pair.upper()}.")
     except Exception as exc:
-        print(f"Candle warm-up unavailable; accumulating live prices instead: {exc}", file=sys.stderr)
+        print(f"Candle warm-up unavailable; entries are disabled until closed candles are available: {exc}", file=sys.stderr)
     print(f"Started {config['mode']} bot for {active_pair.upper()}. Press Ctrl+C to stop.")
     while not globals()["_stop"]:
         try:
@@ -418,13 +460,20 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
                 ledger.screen_events.append({"time": now(), **screen})
                 if candidate != active_pair:
                     active_pair, ledger.active_pair = candidate, candidate
-                    prices = warm_prices(api, active_pair, config)
+                    candles = warm_candles(api, active_pair, config)
+                    ledger.last_candle_time = candles[-1].timestamp
                     print(f"Re-screen selected {active_pair.upper()}: score={screen['score']:.2f}")
-            price = api.ticker(active_pair)
-            prices.append(price)
-            prices = prices[-(int(config["strategy"]["slow_sma"]) + 2):]
+            quote = api.ticker_data(active_pair)
+            price = quote["last"]
             protective_exit = exit_reason(ledger, price, config)
-            decision = "sell" if protective_exit else signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
+            decision = "sell" if protective_exit else None
+            latest_candles = warm_candles(api, active_pair, config)
+            if latest_candles and latest_candles[-1].timestamp > ledger.last_candle_time:
+                candles = latest_candles
+                ledger.last_candle_time = candles[-1].timestamp
+                closes = [candle.close for candle in candles]
+                decision = "sell" if protective_exit else signal_from_prices(closes, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
+                print(f"Closed candle {candles[-1].timestamp} processed for {active_pair.upper()}.")
             allowed, reason = can_trade(ledger, price, config)
             # An exit reduces exposure, so it remains available even if the
             # daily-loss guard has blocked new entries.
@@ -432,7 +481,10 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
                 allowed = True
             if decision and allowed:
                 if config["mode"] == "paper":
-                    result = fill_paper(ledger, decision, price, config, protective_exit or "sma_crossover")
+                    # Use bid for sells and ask for buys; fill_paper adds a
+                    # conservative configurable slippage assumption.
+                    execution_price = quote["ask"] if decision == "buy" else quote["bid"]
+                    result = fill_paper(ledger, decision, execution_price, config, protective_exit or "sma_crossover")
                 else:
                     result = execute_live(api, ledger, decision, price, {**config, "pair": active_pair}, protective_exit or "sma_crossover")
                 if result: print(f"{now()} {decision.upper()} executed ({protective_exit or 'sma_crossover'}): {result}")
@@ -451,7 +503,8 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
 
 
 def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
-    # Uses the exchange balance each time and records submission; it never assumes instant fills.
+    # The order is recorded as a submission.  No ledger position is changed
+    # until a future exchange-reconciliation implementation confirms fills.
     balances = api.balances()
     base = config["pair"].lower().replace("idr", "")
     if side == "buy":
@@ -462,7 +515,7 @@ def execute_live(api: Indodax, ledger: Ledger, side: str, price: float, config: 
         amount = balances.get(base, 0.0)
         if amount <= 0: return None
         result = api.trade(config["pair"], "sell", price, asset_amount=amount)
-    ledger.trades.append({"time": now(), "mode": "live", "side": side, "reason": reason, "price": price, "exchange_response": result})
+    ledger.trades.append({"time": now(), "mode": "live_submission", "side": side, "reason": reason, "price": price, "exchange_response": result})
     return result
 
 
@@ -476,14 +529,43 @@ def parse_timestamp(value: str) -> datetime:
 def backtest(config: dict[str, Any], candles_path: Path) -> None:
     with candles_path.open(newline="", encoding="utf-8") as fh:
         candles = list(csv.DictReader(fh))
-    if not candles or not {"timestamp", "close"}.issubset(candles[0]):
-        raise ValueError("CSV needs at least timestamp and close columns")
+    required = {"timestamp", "open", "high", "low", "close"}
+    if not candles or not required.issubset(candles[0]):
+        raise ValueError("CSV needs timestamp, open, high, low, and close columns")
     ledger, prices = Ledger(cash_idr=float(config["starting_idr"]), peak_equity=float(config["starting_idr"]), day_start_equity=float(config["starting_idr"]), day="backtest"), []
-    for candle in candles:
-        price = float(candle["close"]); prices.append(price)
-        decision = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
-        if decision: fill_paper(ledger, decision, price, config)
-        ledger.peak_equity = max(ledger.peak_equity, equity(ledger, price))
+    pending_side: str | None = None
+    for row in candles:
+        candle = Candle(int(float(row["timestamp"])), float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"]))
+        # Signals from the prior close fill no earlier than this candle open.
+        if pending_side:
+            fill_paper(ledger, pending_side, candle.open, config, "sma_crossover")
+            pending_side = None
+        # Stops are evaluated within the candle. If both targets could be hit,
+        # use the adverse result instead of choosing the favorable path.
+        if ledger.asset > 0:
+            entry = ledger.average_cost
+            ledger.highest_price = max(ledger.highest_price, candle.high)
+            stop = entry * (1 - float(config["risk"]["stop_loss_pct"]))
+            target = entry * (1 + float(config["risk"]["take_profit_pct"]))
+            trail = ledger.highest_price * (1 - float(config["risk"]["trailing_stop_pct"]))
+            trigger_price, reason = None, None
+            if candle.low <= stop:
+                trigger_price, reason = stop, "stop_loss"
+            elif candle.high >= target:
+                trigger_price, reason = target, "take_profit"
+            elif ledger.highest_price >= entry * (1 + float(config["risk"]["trailing_activation_pct"])) and candle.low <= trail:
+                trigger_price, reason = trail, "trailing_stop"
+            if trigger_price is not None:
+                fill_paper(ledger, "sell", trigger_price, config, reason)
+        prices.append(candle.close)
+        prices = prices[-(int(config["strategy"]["slow_sma"]) + 2):]
+        if ledger.asset <= 0:
+            allowed, _ = can_trade(ledger, candle.close, config)
+            if allowed and signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"])) == "buy":
+                pending_side = "buy"
+        elif signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"])) == "sell":
+            pending_side = "sell"
+        ledger.peak_equity = max(ledger.peak_equity, equity(ledger, candle.close))
     final_price = float(candles[-1]["close"])
     text = report(ledger, final_price, config, f"Backtest report ({len(candles)} candles)")
     path = write_report(text)

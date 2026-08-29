@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Ensure we can import the bot module
-BOT_DIR = Path("/opt/data/my-trade-bot")
+BOT_DIR = Path(__file__).resolve().parent
 os.chdir(BOT_DIR)
 sys.path.insert(0, str(BOT_DIR))
 

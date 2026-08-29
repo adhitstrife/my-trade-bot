@@ -5,7 +5,8 @@
 # from cron every few minutes.
 # ============================================================
 set -u
-cd /opt/data/my-trade-bot || exit 1
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR" || exit 1
 mkdir -p data logs
 
 WLOG=logs/watchdog.log

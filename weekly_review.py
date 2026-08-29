@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from datetime import datetime, timezone
 
-BOT_DIR = Path("/opt/data/my-trade-bot")
+BOT_DIR = Path(__file__).resolve().parent
 os.chdir(BOT_DIR)
 
 with open(BOT_DIR / "data/state.json") as f:
