@@ -52,6 +52,38 @@ python audit_report.py
 
 Reports read the local `data/state.json`. They are useful for monitoring but do not independently validate a trading edge.
 
+## Deploy to Hermes VPS
+
+Use this sequence when updating the existing bot on Hermes. It preserves the current paper ledger and avoids unintentionally enabling live orders.
+
+```bash
+cd /opt/data/my-trade-bot
+git status --short
+mkdir -p backup
+cp config.json "backup/config-$(date +%F-%H%M%S).json"
+test -f data/state.json && cp data/state.json "backup/state-$(date +%F-%H%M%S).json"
+git pull --ff-only origin main
+python3 -m compileall -q .
+python3 -m unittest -v
+```
+
+Before restarting, confirm `config.json` contains `"mode": "paper"`. Also ensure `ALLOW_LIVE_TRADING` is not set in the shell, service, or scheduler environment.
+
+```bash
+unset ALLOW_LIVE_TRADING
+./start_bot.sh
+tail -n 50 logs/bot.log
+cat data/state.json
+```
+
+The expected startup message states that closed historical candles were loaded. If the pull has a configuration conflict, tests fail, candle data is unavailable, or the bot reports an API error, stop there and restore the saved configuration/state if needed. Do not enable live mode to work around an error.
+
+The watchdog script can continue to run after a successful paper-mode verification:
+
+```bash
+./watchdog.sh
+```
+
 ## Security
 
 Store credentials only in `.env`, never commit them, and use an exchange API key without withdrawal permission. Rotate any key that was ever exposed.
