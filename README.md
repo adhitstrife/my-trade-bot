@@ -16,7 +16,8 @@ python bot.py run --config config.json
 - Uses the current bid/ask for paper-fill pricing, then adds configurable slippage and fees.
 - Caps each entry by both maximum exposure and risk at the stop loss.
 - Applies stop loss, take profit, trailing stop, and a daily-loss guard.
-- Limits screening to the configured allowlist and liquidity/spread requirements.
+- Defaults to BTCIDR only; the screener is disabled to prevent pair switching.
+- Requires an established trend (`trend_sma`), sufficient trend strength (ADX), a minimum SMA separation, cooldown between entries, and at most one entry per day.
 
 ## Backtesting
 
@@ -25,6 +26,21 @@ python bot.py backtest --config config.json --candles candles.csv
 ```
 
 The CSV must contain `timestamp,open,high,low,close`. A signal at one candle's close is filled no earlier than the following candle's open. Fees, slippage, protective exits, and the daily-loss guard are simulated. Treat results as research output, not a performance guarantee.
+
+To download BTCIDR candles directly from Indodax before backtesting:
+
+```bash
+python bot.py download-candles --config config.json --days 180
+python bot.py backtest --config config.json --candles data/btcidr-candles.csv
+```
+
+To compare a small, predeclared set of conservative BTCIDR parameters without selecting on the final 20% of the data:
+
+```bash
+python bot.py optimize --config config.json --candles data/btcidr-candles.csv
+```
+
+Read the generated walk-forward report before changing `config.json`. Do not adopt a candidate unless its holdout return, expectancy, and profit factor are positive with enough closed positions.
 
 ## Safety of live mode
 
@@ -37,6 +53,8 @@ Important controls in `config.json`:
 - `fee_rate` and `execution_slippage_pct`: conservative paper-execution assumptions.
 - `max_position_pct`: maximum exposure in one position.
 - `max_risk_per_trade_pct`: maximum equity at risk if the stop is reached.
+- `trend_sma`, `min_adx`, and `min_sma_separation_pct`: filters that reject weak or choppy crossover entries.
+- `max_entries_per_day` and `cooldown_candles`: explicit turnover limits.
 - `stop_loss_pct`, `take_profit_pct`, `trailing_stop_pct`, `trailing_activation_pct`: exit policy.
 - `screener`: allowlisted pair selection and liquidity/spread gates.
 

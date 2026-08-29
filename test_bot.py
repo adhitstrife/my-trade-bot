@@ -1,5 +1,6 @@
 import copy
 import unittest
+from datetime import datetime, timezone
 
 import bot
 
@@ -42,6 +43,15 @@ class BotTests(unittest.TestCase):
     def test_crossover_requires_a_real_cross(self):
         self.assertEqual(bot.signal_from_prices([10, 9, 8, 11], 2, 3), "buy")
         self.assertIsNone(bot.signal_from_prices([8, 9, 10, 11], 2, 3))
+
+    def test_daily_entry_limit_blocks_another_buy(self):
+        ledger = self.ledger()
+        ledger.day = datetime.now(timezone.utc).date().isoformat()
+        ledger.entries_today = 1
+        self.config["risk"]["max_entries_per_day"] = 1
+        allowed, reason = bot.can_trade(ledger, 100, self.config)
+        self.assertFalse(allowed)
+        self.assertIn("daily", reason)
 
 
 if __name__ == "__main__":

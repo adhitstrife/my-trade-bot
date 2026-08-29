@@ -1,30 +1,36 @@
 {
   "mode": "paper",
   "pair": "btcidr",
-  "poll_seconds": 60,
+  "poll_seconds": 300,
   "starting_idr": 1000000,
   "fee_rate": 0.003,
   "execution_slippage_pct": 0.001,
   "strategy": {
-    "fast_sma": 10,
-    "slow_sma": 30
+    "fast_sma": 20,
+    "slow_sma": 50,
+    "trend_sma": 100,
+    "adx_period": 14,
+    "min_adx": 22,
+    "min_sma_separation_pct": 0.001
   },
   "risk": {
     "max_position_pct": 0.2,
     "max_risk_per_trade_pct": 0.005,
     "max_daily_loss_pct": 0.03,
+    "max_entries_per_day": 2,
+    "cooldown_candles": 12,
     "min_order_idr": 10000,
-    "stop_loss_pct": 0.03,
+    "stop_loss_pct": 0.02,
     "take_profit_pct": 0.08,
-    "trailing_stop_pct": 0.025,
+    "trailing_stop_pct": 0.015,
     "trailing_activation_pct": 0.04
   },
   "candle_timeframe": "60",
   "screener": {
-    "enabled": true,
+    "enabled": false,
     "paper_only": true,
     "rescreen_hours": 4,
-    "allowlist": ["btcidr", "ethidr", "solidr"],
+    "allowlist": ["btcidr"],
     "min_volume_idr": 100000000,
     "max_spread_pct": 0.01
   }

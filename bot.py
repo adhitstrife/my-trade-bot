@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import hmac
@@ -11,6 +12,7 @@ import math
 import os
 import signal
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -90,11 +92,21 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("mode must be 'paper' or 'live'")
     if config["strategy"]["fast_sma"] >= config["strategy"]["slow_sma"]:
         raise ValueError("fast_sma must be smaller than slow_sma")
+    if float(config.get("execution_slippage_pct", 0)) < 0 or float(config.get("execution_slippage_pct", 0)) >= 1:
+        raise ValueError("execution_slippage_pct must be between 0 and 1")
+    strategy = config["strategy"]
+    if int(strategy.get("trend_sma", 0)) and int(strategy["slow_sma"]) >= int(strategy["trend_sma"]):
+        raise ValueError("trend_sma must be larger than slow_sma")
+    if float(strategy.get("min_adx", 0)) < 0 or float(strategy.get("min_sma_separation_pct", 0)) < 0:
+        raise ValueError("strategy filters cannot be negative")
     if not 0 < config["risk"]["max_position_pct"] <= 1:
         raise ValueError("max_position_pct must be between 0 and 1")
     for key in ("stop_loss_pct", "take_profit_pct", "trailing_stop_pct", "trailing_activation_pct", "max_risk_per_trade_pct"):
         if key not in config["risk"] or not 0 < float(config["risk"][key]) < 1:
             raise ValueError(f"risk.{key} must be a decimal between 0 and 1")
+    for key in ("max_entries_per_day", "cooldown_candles"):
+        if int(config["risk"].get(key, 0)) < 0:
+            raise ValueError(f"risk.{key} cannot be negative")
     screener = config.get("screener", {})
     if screener.get("enabled") and not screener.get("allowlist"):
         raise ValueError("screener.allowlist must contain at least one pair")
@@ -232,6 +244,8 @@ class Ledger:
     screen_events: list[dict[str, Any]] | None = None
     highest_price: float = 0.0
     last_candle_time: int = 0
+    last_entry_candle_time: int = 0
+    entries_today: int = 0
 
     def __post_init__(self) -> None:
         self.trades = self.trades or []
@@ -274,22 +288,66 @@ def equity(ledger: Ledger, price: float) -> float:
     return ledger.cash_idr + ledger.asset * price
 
 
-def roll_day(ledger: Ledger, price: float) -> None:
-    day = datetime.now(timezone.utc).date().isoformat()
+def roll_day(ledger: Ledger, price: float, day: str | None = None) -> None:
+    day = day or datetime.now(timezone.utc).date().isoformat()
     if ledger.day != day:
-        ledger.day, ledger.day_start_equity = day, equity(ledger, price)
+        ledger.day, ledger.day_start_equity, ledger.entries_today = day, equity(ledger, price), 0
 
 
-def signal_from_prices(prices: list[float], fast: int, slow: int) -> str | None:
+def signal_from_prices(prices: list[float], fast: int, slow: int, min_separation_pct: float = 0.0) -> str | None:
     if len(prices) < slow + 1:
         return None
     previous_fast, previous_slow = fmean(prices[-fast-1:-1]), fmean(prices[-slow-1:-1])
     current_fast, current_slow = fmean(prices[-fast:]), fmean(prices[-slow:])
-    if previous_fast <= previous_slow and current_fast > current_slow:
+    separation = abs(current_fast - current_slow) / current_slow if current_slow else 0.0
+    if previous_fast <= previous_slow and current_fast > current_slow and separation >= min_separation_pct:
         return "buy"
     if previous_fast >= previous_slow and current_fast < current_slow:
         return "sell"
     return None
+
+
+def calculate_adx(candles: list[Candle], period: int = 14) -> float:
+    """Return a simple, deterministic ADX approximation for a closed-candle window."""
+    if len(candles) < period * 2 + 1:
+        return 0.0
+    tr_values, plus_dm, minus_dm = [], [], []
+    for previous, current in zip(candles[:-1], candles[1:]):
+        tr_values.append(max(current.high - current.low, abs(current.high - previous.close), abs(current.low - previous.close)))
+        up_move, down_move = current.high - previous.high, previous.low - current.low
+        plus_dm.append(up_move if up_move > down_move and up_move > 0 else 0.0)
+        minus_dm.append(down_move if down_move > up_move and down_move > 0 else 0.0)
+    dx_values: list[float] = []
+    for index in range(period - 1, len(tr_values)):
+        tr = sum(tr_values[index - period + 1:index + 1])
+        if tr <= 0:
+            dx_values.append(0.0)
+            continue
+        plus_di = 100 * sum(plus_dm[index - period + 1:index + 1]) / tr
+        minus_di = 100 * sum(minus_dm[index - period + 1:index + 1]) / tr
+        denominator = plus_di + minus_di
+        dx_values.append(100 * abs(plus_di - minus_di) / denominator if denominator else 0.0)
+    return fmean(dx_values[-period:]) if len(dx_values) >= period else 0.0
+
+
+def entry_filters(candles: list[Candle], config: dict[str, Any]) -> tuple[bool, str]:
+    """Require an established BTC trend before accepting a crossover entry."""
+    strategy = config["strategy"]
+    closes = [candle.close for candle in candles]
+    trend_period = int(strategy.get("trend_sma", 0))
+    if trend_period and len(closes) < trend_period + 1:
+        return False, "insufficient candles for trend filter"
+    if trend_period:
+        trend_now = fmean(closes[-trend_period:])
+        trend_previous = fmean(closes[-trend_period-1:-1])
+        if closes[-1] <= trend_now or trend_now <= trend_previous:
+            return False, "higher trend filter not met"
+    min_adx = float(strategy.get("min_adx", 0))
+    if min_adx:
+        adx = calculate_adx(candles, int(strategy.get("adx_period", 14)))
+        if adx < min_adx:
+            return False, f"ADX {adx:.1f} below {min_adx:.1f}"
+    return True, ""
 
 
 def screen_pair(api: Indodax, config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -325,15 +383,16 @@ def screen_pair(api: Indodax, config: dict[str, Any]) -> tuple[str, dict[str, An
 
 
 def warm_candles(api: Indodax, pair: str, config: dict[str, Any]) -> list[Candle]:
-    slow = int(config["strategy"]["slow_sma"])
+    strategy = config["strategy"]
+    required = max(int(strategy["slow_sma"]), int(strategy.get("trend_sma", 0)), int(strategy.get("adx_period", 14)) * 2 + 1)
     timeframe = str(config.get("candle_timeframe", "60"))
-    candles = api.history(pair, timeframe, slow + 3)
-    if len(candles) < slow + 1:
-        raise RuntimeError(f"Only received {len(candles)} closed candles; need {slow + 1}")
-    return candles[-(slow + 2):]
+    candles = api.history(pair, timeframe, required + 3)
+    if len(candles) < required + 1:
+        raise RuntimeError(f"Only received {len(candles)} closed candles; need {required + 1}")
+    return candles[-(required + 2):]
 
 
-def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover") -> dict[str, Any] | None:
+def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], reason: str = "sma_crossover", trade_time: str | None = None) -> dict[str, Any] | None:
     fee = float(config["fee_rate"])
     risk = config["risk"]
     slippage = float(config.get("execution_slippage_pct", 0.001))
@@ -351,25 +410,38 @@ def fill_paper(ledger: Ledger, side: str, price: float, config: dict[str, Any], 
         ledger.asset += quantity
         ledger.average_cost = (old_value + spend) / ledger.asset
         ledger.highest_price = fill_price
+        ledger.last_entry_candle_time = ledger.last_candle_time
+        ledger.entries_today += 1
         amount = spend
+        net_pnl = None
     else:
         quantity = ledger.asset
         if quantity <= 0:
             return None
         proceeds = quantity * fill_price * (1 - fee)
+        net_pnl = proceeds - quantity * ledger.average_cost
         ledger.cash_idr += proceeds
-        ledger.realized_pnl += proceeds - quantity * ledger.average_cost
+        ledger.realized_pnl += net_pnl
         ledger.asset, ledger.average_cost, ledger.highest_price, amount = 0.0, 0.0, 0.0, quantity
-    trade = {"time": now(), "mode": "paper", "side": side, "reason": reason, "signal_price": price, "price": fill_price, "amount": amount, "fee_rate": fee, "slippage_pct": slippage, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
+    trade = {"time": trade_time or now(), "mode": "paper", "side": side, "reason": reason, "signal_price": price, "price": fill_price, "amount": amount, "fee_rate": fee, "slippage_pct": slippage, "net_pnl": net_pnl, "asset_after": ledger.asset, "cash_after": ledger.cash_idr}
     ledger.trades.append(trade)
     return trade
 
 
-def can_trade(ledger: Ledger, price: float, config: dict[str, Any]) -> tuple[bool, str]:
-    roll_day(ledger, price)
+def can_trade(ledger: Ledger, price: float, config: dict[str, Any], day: str | None = None) -> tuple[bool, str]:
+    roll_day(ledger, price, day)
     loss_limit = float(config["risk"]["max_daily_loss_pct"])
     if equity(ledger, price) < ledger.day_start_equity * (1 - loss_limit):
         return False, "daily loss limit reached"
+    max_entries = int(config["risk"].get("max_entries_per_day", 0))
+    if max_entries and ledger.entries_today >= max_entries:
+        return False, "maximum daily entries reached"
+    cooldown = int(config["risk"].get("cooldown_candles", 0))
+    if cooldown and ledger.last_entry_candle_time:
+        minutes = int(str(config.get("candle_timeframe", "60")))
+        elapsed = ledger.last_candle_time - ledger.last_entry_candle_time
+        if elapsed < cooldown * minutes * 60:
+            return False, "entry cooldown active"
     return True, ""
 
 
@@ -472,7 +544,19 @@ def run(config: dict[str, Any], confirm_live: bool) -> None:
                 candles = latest_candles
                 ledger.last_candle_time = candles[-1].timestamp
                 closes = [candle.close for candle in candles]
-                decision = "sell" if protective_exit else signal_from_prices(closes, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]))
+                signal = signal_from_prices(
+                    closes,
+                    int(config["strategy"]["fast_sma"]),
+                    int(config["strategy"]["slow_sma"]),
+                    float(config["strategy"].get("min_sma_separation_pct", 0)),
+                )
+                if signal == "buy":
+                    eligible, filter_reason = entry_filters(candles, config)
+                    decision = "buy" if eligible else None
+                    if not eligible:
+                        print(f"{now()} BUY blocked: {filter_reason}")
+                else:
+                    decision = signal
                 print(f"Closed candle {candles[-1].timestamp} processed for {active_pair.upper()}.")
             allowed, reason = can_trade(ledger, price, config)
             # An exit reduces exposure, so it remains available even if the
@@ -526,19 +610,39 @@ def parse_timestamp(value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def backtest(config: dict[str, Any], candles_path: Path) -> None:
+def performance_metrics(ledger: Ledger, final_price: float, from_timestamp: int | None = None) -> dict[str, float | int]:
+    closed = [trade for trade in ledger.trades if trade["side"] == "sell" and trade.get("net_pnl") is not None]
+    if from_timestamp is not None:
+        closed = [trade for trade in closed if parse_timestamp(str(trade["time"])).timestamp() >= from_timestamp]
+    wins = [float(trade["net_pnl"]) for trade in closed if float(trade["net_pnl"]) > 0]
+    losses = [float(trade["net_pnl"]) for trade in closed if float(trade["net_pnl"]) <= 0]
+    gross_wins, gross_losses = sum(wins), abs(sum(losses))
+    return {
+        "closed_positions": len(closed),
+        "wins": len(wins),
+        "win_rate_pct": len(wins) / len(closed) * 100 if closed else 0.0,
+        "profit_factor": gross_wins / gross_losses if gross_losses else (float("inf") if gross_wins else 0.0),
+        "expectancy_idr": sum(wins + losses) / len(closed) if closed else 0.0,
+        "return_pct": sum(wins + losses) / ledger.day_start_equity * 100 if ledger.day_start_equity else 0.0,
+        "net_pnl": sum(wins + losses),
+    }
+
+
+def backtest(config: dict[str, Any], candles_path: Path, emit: bool = True, metric_from_timestamp: int | None = None) -> dict[str, float | int]:
     with candles_path.open(newline="", encoding="utf-8") as fh:
         candles = list(csv.DictReader(fh))
     required = {"timestamp", "open", "high", "low", "close"}
     if not candles or not required.issubset(candles[0]):
         raise ValueError("CSV needs timestamp, open, high, low, and close columns")
-    ledger, prices = Ledger(cash_idr=float(config["starting_idr"]), peak_equity=float(config["starting_idr"]), day_start_equity=float(config["starting_idr"]), day="backtest"), []
+    ledger, prices, candle_history = Ledger(cash_idr=float(config["starting_idr"]), peak_equity=float(config["starting_idr"]), day_start_equity=float(config["starting_idr"]), day="backtest"), [], []
     pending_side: str | None = None
     for row in candles:
         candle = Candle(int(float(row["timestamp"])), float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"]))
+        ledger.last_candle_time = candle.timestamp
+        candle_time = datetime.fromtimestamp(candle.timestamp, tz=timezone.utc).isoformat(timespec="seconds")
         # Signals from the prior close fill no earlier than this candle open.
         if pending_side:
-            fill_paper(ledger, pending_side, candle.open, config, "sma_crossover")
+            fill_paper(ledger, pending_side, candle.open, config, "sma_crossover", candle_time)
             pending_side = None
         # Stops are evaluated within the candle. If both targets could be hit,
         # use the adverse result instead of choosing the favorable path.
@@ -556,28 +660,127 @@ def backtest(config: dict[str, Any], candles_path: Path) -> None:
             elif ledger.highest_price >= entry * (1 + float(config["risk"]["trailing_activation_pct"])) and candle.low <= trail:
                 trigger_price, reason = trail, "trailing_stop"
             if trigger_price is not None:
-                fill_paper(ledger, "sell", trigger_price, config, reason)
+                fill_paper(ledger, "sell", trigger_price, config, reason, candle_time)
         prices.append(candle.close)
         prices = prices[-(int(config["strategy"]["slow_sma"]) + 2):]
+        candle_history.append(candle)
+        required_history = max(int(config["strategy"].get("trend_sma", 0)), int(config["strategy"].get("adx_period", 14)) * 2 + 1) + 1
+        filter_window = candle_history[-required_history:]
         if ledger.asset <= 0:
-            allowed, _ = can_trade(ledger, candle.close, config)
-            if allowed and signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"])) == "buy":
-                pending_side = "buy"
-        elif signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"])) == "sell":
+            allowed, _ = can_trade(ledger, candle.close, config, candle_time[:10])
+            signal = signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]), float(config["strategy"].get("min_sma_separation_pct", 0)))
+            if allowed and signal == "buy":
+                eligible, _ = entry_filters(filter_window, config)
+                if eligible:
+                    pending_side = "buy"
+        elif signal_from_prices(prices, int(config["strategy"]["fast_sma"]), int(config["strategy"]["slow_sma"]), float(config["strategy"].get("min_sma_separation_pct", 0))) == "sell":
             pending_side = "sell"
         ledger.peak_equity = max(ledger.peak_equity, equity(ledger, candle.close))
     final_price = float(candles[-1]["close"])
-    text = report(ledger, final_price, config, f"Backtest report ({len(candles)} candles)")
-    path = write_report(text)
-    print(text)
-    if path: print(f"Saved: {path}")
+    metrics = performance_metrics(ledger, final_price, metric_from_timestamp)
+    if emit:
+        text = report(ledger, final_price, config, f"Backtest report ({len(candles)} candles)")
+        factor = f"{metrics['profit_factor']:.2f}" if math.isfinite(float(metrics["profit_factor"])) else "∞"
+        text += (f"\nClosed positions: {metrics['closed_positions']} | Win rate: {metrics['win_rate_pct']:.1f}%"
+                 f" | Profit factor: {factor} | Expectancy: Rp {metrics['expectancy_idr']:,.2f}")
+        path = write_report(text)
+        print(text)
+        if path: print(f"Saved: {path}")
+    return metrics
+
+
+def _write_candle_rows(rows: list[dict[str, str]], path: Path) -> None:
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=("timestamp", "open", "high", "low", "close"))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def walk_forward_optimize(config: dict[str, Any], candles_path: Path) -> Path:
+    """Select a BTC-only configuration without using the final holdout period."""
+    with candles_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    if len(rows) < 500:
+        raise ValueError("Walk-forward optimisation needs at least 500 candles")
+    cutoff = int(len(rows) * 0.8)
+    validation_windows = [(int(len(rows) * 0.4), int(len(rows) * 0.6)), (int(len(rows) * 0.6), cutoff)]
+    candidates: list[dict[str, Any]] = []
+    for fast, slow in ((10, 30), (15, 40), (20, 50)):
+        for min_adx in (0, 18, 22):
+            for separation in (0.0, 0.0005):
+                for cooldown in (6, 12):
+                    candidate = copy.deepcopy(config)
+                    candidate["pair"] = "btcidr"
+                    candidate["screener"]["enabled"] = False
+                    candidate["strategy"].update({"fast_sma": fast, "slow_sma": slow, "trend_sma": slow * 2, "min_adx": min_adx, "min_sma_separation_pct": separation})
+                    candidate["risk"].update({"cooldown_candles": cooldown, "max_entries_per_day": 2})
+                    candidates.append(candidate)
+    results: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "candles.csv"
+        for candidate in candidates:
+            validation: list[dict[str, float | int]] = []
+            for start, end in validation_windows:
+                # Each validation begins with all preceding candles so that the
+                # indicators warm up, but score only the new window via an
+                # independent run over that window plus its required history.
+                history_start = max(0, start - 250)
+                _write_candle_rows(rows[history_start:end], temp_path)
+                validation.append(backtest(candidate, temp_path, emit=False, metric_from_timestamp=int(float(rows[start]["timestamp"]))))
+            closed = sum(int(metric["closed_positions"]) for metric in validation)
+            average_return = fmean(float(metric["return_pct"]) for metric in validation)
+            average_pf = fmean(float(metric["profit_factor"]) for metric in validation if math.isfinite(float(metric["profit_factor"]))) if any(math.isfinite(float(metric["profit_factor"])) for metric in validation) else 0.0
+            # Reject fragile candidates with too little evidence; remaining
+            # candidates are ranked by return after costs, then profit factor.
+            score = average_return + min(2.0, average_pf) * 0.1 if closed >= 3 else -999.0
+            results.append({"config": candidate, "validation": validation, "closed_positions": closed, "average_return_pct": average_return, "average_profit_factor": average_pf, "score": score})
+        ranked = sorted(results, key=lambda item: float(item["score"]), reverse=True)
+        selected = ranked[0]
+        _write_candle_rows(rows[cutoff - 250:], temp_path)
+        holdout = backtest(selected["config"], temp_path, emit=False, metric_from_timestamp=int(float(rows[cutoff]["timestamp"])))
+    REPORTS.mkdir(parents=True, exist_ok=True)
+    output = REPORTS / f"walk-forward-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    viable = float(selected["average_return_pct"]) > 0 and float(selected["average_profit_factor"]) > 1 and int(selected["closed_positions"]) >= 3
+    output.write_text(json.dumps({
+        "candles": len(rows), "validation_windows": validation_windows,
+        "selected": selected, "holdout": holdout, "viable": viable,
+        "top_candidates": ranked[:5],
+        "warning": "Selected by validation only. Holdout must be positive before adopting parameters."
+    }, indent=2), encoding="utf-8")
+    print(f"Walk-forward report saved: {output}")
+    print(f"Selected: SMA {selected['config']['strategy']['fast_sma']}/{selected['config']['strategy']['slow_sma']}, ADX >= {selected['config']['strategy']['min_adx']}, cooldown {selected['config']['risk']['cooldown_candles']} candles")
+    print(f"Holdout: {holdout['closed_positions']} positions | WR {holdout['win_rate_pct']:.1f}% | PF {holdout['profit_factor']:.2f} | return {holdout['return_pct']:+.2f}%")
+    print("Candidate is viable for paper testing." if viable else "No candidate passed validation; keep the existing configuration and collect more data.")
+    return output
+
+
+def download_candles(config: dict[str, Any], days: int, output: Path) -> Path:
+    """Download public completed candles in the CSV format used by backtest."""
+    if days <= 0:
+        raise ValueError("days must be positive")
+    timeframe = str(config.get("candle_timeframe", "60"))
+    minutes = int(timeframe)
+    bars = math.ceil(days * 24 * 60 / minutes)
+    api = Indodax()
+    candles = api.history(config["pair"], timeframe, bars)
+    if len(candles) < int(config["strategy"]["slow_sma"]) + 2:
+        raise RuntimeError(f"Only received {len(candles)} closed candles; not enough for a backtest")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=("timestamp", "open", "high", "low", "close"))
+        writer.writeheader()
+        writer.writerows(asdict(candle) for candle in candles)
+    print(f"Downloaded {len(candles)} completed {timeframe}m candles to {output}")
+    return output
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("run", "report", "backtest"))
+    parser.add_argument("command", choices=("run", "report", "backtest", "download-candles", "optimize"))
     parser.add_argument("--config", default="config.json", type=Path)
     parser.add_argument("--candles", type=Path, help="CSV for backtest")
+    parser.add_argument("--days", type=int, default=180, help="history length for download-candles")
+    parser.add_argument("--output", type=Path, default=Path("data/btcidr-candles.csv"), help="output CSV for download-candles")
     parser.add_argument("--confirm-live", action="store_true", help="required to submit live orders")
     args = parser.parse_args()
     config = load_config(args.config)
@@ -591,9 +794,14 @@ def main() -> None:
             except Exception as exc: text += f"\nExchange balance unavailable: {exc}"
         path = write_report(text); print(text)
         if path: print(f"Saved: {path}")
-    else:
+    elif args.command == "backtest":
         if not args.candles: parser.error("backtest requires --candles FILE")
         backtest(config, args.candles)
+    elif args.command == "optimize":
+        if not args.candles: parser.error("optimize requires --candles FILE")
+        walk_forward_optimize(config, args.candles)
+    else:
+        download_candles(config, args.days, args.output)
 
 
 if __name__ == "__main__":
